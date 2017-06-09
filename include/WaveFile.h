@@ -9,133 +9,7 @@
 #include <math.h>    // log
 #include <vector>    // vector
 
-class WaveFile
-{
-public:
-    WaveFile(){}
-    ~WaveFile(){
-        std::vector<uint8_t*>::iterator it = signales.begin();
-        while(it != signales.end()){
-            delete *it;
-            it++;
-        }
-    }
-
-    bool ReadHeader(FILE *inputFile){
-        if (inputFile==NULL) return false;
-        fread(&fileHeader, sizeof(FileHeader), 1, inputFile);
-        blockCount=(fileHeader.dataHeader.DataSize-sizeof(FileHeader))/fileHeader.audioHeader.BytePerBloc;
-        return true;
-    }
-
-    bool ReadData(FILE *inputFile){
-        if (inputFile==NULL) return false;
-        ReadHeader(inputFile);
-
-        uint8_t *data=new uint8_t[blockCount*fileHeader.audioHeader.CnNumber*fileHeader.audioHeader.BitsPerSample/8];
-        fread(data, 1, blockCount*fileHeader.audioHeader.CnNumber*fileHeader.audioHeader.BitsPerSample/8, inputFile);
-
-        std::vector<uint8_t*>::iterator it = signales.begin();
-        while(it != signales.end()){
-            delete *it;
-            it++;
-        }
-        signales.clear();
-
-        for (int chanel = 0; chanel < fileHeader.audioHeader.CnNumber; ++chanel) {
-            signales.push_back(new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8]);
-        }
-
-        for (uint32_t blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
-            for (uint32_t chanelIndex = 0; chanelIndex < fileHeader.audioHeader.CnNumber; ++chanelIndex) {
-                ((int16_t*)signales[chanelIndex])[blockIndex]=
-                        ((int16_t*)data)[blockIndex*fileHeader.audioHeader.CnNumber+chanelIndex];
-            }
-        }
-        delete data;
-        return true;
-    }
-
-    void CoutData(){
-        for (uint32_t blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
-            std::cout << blockIndex;
-            for (int chanelIndex = 0; chanelIndex < fileHeader.audioHeader.CnNumber; ++chanelIndex) {
-                switch (fileHeader.audioHeader.BitsPerSample) {
-
-                case 8:
-                    std::cout << ", "<< ((int8_t*)signales[chanelIndex])[blockIndex];
-                    break;
-
-                case 16:
-                    std::cout << ", "<< ((int16_t*)signales[chanelIndex])[blockIndex];
-                    break;
-                }
-            }
-            std::cout << std::endl;
-        }
-    }
-
-    void AddEntropyChannel(int elements,int mod){
-
-        uint32_t backward=elements/2;
-        uint32_t forward=elements-backward;
-
-
-        signales.push_back(new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8]);
-        fileHeader.audioHeader.CnNumber++;
-        for (uint32_t blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
-            if (blockIndex>backward && blockIndex<(blockCount-forward)){
-
-                float entropy=shannonEntropy(&(((int16_t*)signales[fileHeader.audioHeader.CnNumber-2])[blockIndex-backward]), elements,mod);
-
-                ((int16_t*)signales[fileHeader.audioHeader.CnNumber-1])[blockIndex]=entropy*16000;
-
-            }
-        }
-        fileHeader.waveHeader.FileSize=
-                sizeof(FileHeader)
-                +fileHeader.audioHeader.CnNumber*blockCount*fileHeader.audioHeader.BitsPerSample/8
-                -8;
-        fileHeader.dataHeader.DataSize=fileHeader.waveHeader.FileSize-sizeof(FileHeader);
-    }
-
-    void ConvertHtoPWM(int chanelIndex){
-        uint8_t *PWM=new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8];
-
-        int f=fileHeader.audioHeader.Frequency;
-        int periode=18*fileHeader.audioHeader.Frequency/1000; //pulse
-        int minPulsW=1*fileHeader.audioHeader.Frequency/1000; //pulse
-        int maxPulsW=2*fileHeader.audioHeader.Frequency/1000; //pulse
-        int maxPulsDuration=maxPulsW-minPulsW;
-
-        for (int periodeIndex = 0; periodeIndex < (blockCount-periode)/periode; ++periodeIndex) {
-            float factor=mean(&(((int16_t*)signales[chanelIndex])[periodeIndex*periode]),maxPulsDuration)/INT16_MAX;
-            uint16_t pulsW=minPulsW+maxPulsDuration*factor;
-            for (int pulseSubPeriodeIndex = 0; pulseSubPeriodeIndex < periode; ++pulseSubPeriodeIndex) {
-                if (pulseSubPeriodeIndex<pulsW) ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=-INT16_MAX;
-                else ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=0;
-            }
-        }
-
-        //AddEntropyChannel(1,1);
-        //delete signales[chanelIndex+1];
-        //signales[chanelIndex+1]=PWM;
-
-        delete signales[chanelIndex];
-        signales[chanelIndex]=PWM;
-    }
-
-    void WrightData(FILE *outputFile){
-        if (outputFile==NULL) return;
-        fwrite(&fileHeader, sizeof(FileHeader), 1, outputFile);
-
-        for (uint32_t blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
-            for (uint32_t chanelIndex = 0; chanelIndex < fileHeader.audioHeader.CnNumber; ++chanelIndex) {
-                fwrite(&((int16_t*)signales[chanelIndex])[blockIndex], sizeof(int16_t), 1, outputFile);
-            }
-        }
-    }
-
+class WaveFile{
 private:
     struct WaveHeader{
         char        FileTypeBlocID[4]; // (4 bytes) Constante «RIFF»  (0x52,0x49,0x46,0x46)
@@ -163,33 +37,20 @@ private:
     };
 
     FileHeader fileHeader;
-    std::vector<uint8_t*> signales;
+    std::vector<uint8_t*> signaleValues;
     uint32_t blockCount; //number of sample (file duration-ish)
 
-    template <typename T> static float shannonEntropy(T data[],int elements,int mod){
-        float entropy=0;
-        std::map<T,int> counts;
-        typename std::map<T,int>::iterator it;
-        //
-        for (int dataIndex = 0; dataIndex < elements; ++dataIndex) {
-            counts[data[dataIndex]-(data[dataIndex]%mod)]++;
-        }
-        //
-        it = counts.begin();
-        while(it != counts.end()){
-            float p_x = (float)it->second/elements;
-            if (p_x>0) entropy-=p_x*log(p_x)/log(2);
-            it++;
-        }
-        return entropy;
-    }
-    template <typename T> static float mean(T data[],uint32_t elements){
-        int64_t total=0;
-        for (uint32_t index = 0; index < elements; ++index) {
-            total+=data[index];
-        }
-        return total/elements;
-    }
+public:
+    WaveFile(){}
+    ~WaveFile();
+
+    bool ReadHeader(FILE *inputFile);
+    bool ReadData(FILE *inputFile);
+    void CoutData();
+    void AddEntropyChannel(int elements,int mod);
+    void ConvertHtoPWM(int chanelIndex);
+    void WrightData(FILE *outputFile);
+
 };
 
 #endif
