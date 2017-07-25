@@ -37,7 +37,7 @@ private:
     };
 
     FileHeader fileHeader;
-    std::vector<uint8_t*> signaleValues;
+    std::vector<uint8_t*> Chanels;
     uint32_t blockCount; //number of sample (file duration-ish)
 
 public:

@@ -1,3 +1,4 @@
 build/
 postTreat.pro.user
 res/out.wav
+*.txt.user

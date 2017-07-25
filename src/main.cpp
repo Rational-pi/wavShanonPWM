@@ -1,4 +1,4 @@
-#include "include/WaveFile.h"
+#include "WaveFile.h"
 
 int main(int argc, char* argv[]){
     ////file opening

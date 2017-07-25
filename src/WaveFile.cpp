@@ -1,12 +1,9 @@
-#include "include/WaveFile.h"
+#include "WaveFile.h"
 
 
 WaveFile::~WaveFile(){
-    std::vector<uint8_t*>::iterator it = signaleValues.begin();
-    while(it != signaleValues.end()){
+    for(std::vector<uint8_t*>::iterator it = Chanels.begin();it!=Chanels.end();++it)
         delete *it;
-        it++;
-    }
 }
 
 bool WaveFile::ReadHeader(FILE *inputFile){
@@ -23,20 +20,17 @@ bool WaveFile::ReadData(FILE *inputFile){
     uint8_t *data=new uint8_t[blockCount*fileHeader.audioHeader.CnNumber*fileHeader.audioHeader.BitsPerSample/8];
     fread(data, 1, blockCount*fileHeader.audioHeader.CnNumber*fileHeader.audioHeader.BitsPerSample/8, inputFile);
 
-    std::vector<uint8_t*>::iterator it = signaleValues.begin();
-    while(it != signaleValues.end()){
-        delete *it;
-        it++;
-    }
-    signaleValues.clear();
+    std::vector<uint8_t*>::iterator it = Chanels.begin();
+    for(;it != Chanels.end();it++)delete *it;
+    Chanels.clear();
 
     for (int chanel = 0; chanel < fileHeader.audioHeader.CnNumber; ++chanel) {
-        signaleValues.push_back(new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8]);
+        Chanels.push_back(new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8]);
     }
 
     for (uint32_t blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
         for (uint32_t chanelIndex = 0; chanelIndex < fileHeader.audioHeader.CnNumber; ++chanelIndex) {
-            ((int16_t*)signaleValues[chanelIndex])[blockIndex]=
+            ((int16_t*)Chanels[chanelIndex])[blockIndex]=
                     ((int16_t*)data)[blockIndex*fileHeader.audioHeader.CnNumber+chanelIndex];
         }
     }
@@ -51,11 +45,11 @@ void WaveFile::CoutData(){
             switch (fileHeader.audioHeader.BitsPerSample) {
 
             case 8:
-                std::cout << ", "<< ((int8_t*)signaleValues[chanelIndex])[blockIndex];
+                std::cout << ", "<< ((int8_t*)Chanels[chanelIndex])[blockIndex];
                 break;
 
             case 16:
-                std::cout << ", "<< ((int16_t*)signaleValues[chanelIndex])[blockIndex];
+                std::cout << ", "<< ((int16_t*)Chanels[chanelIndex])[blockIndex];
                 break;
             }
         }
@@ -86,14 +80,14 @@ void WaveFile::AddEntropyChannel(int elements, int mod){
     uint32_t forward=elements-backward;
 
 
-    signaleValues.push_back(new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8]);
+    Chanels.push_back(new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8]);
     fileHeader.audioHeader.CnNumber++;
     for (uint32_t blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
         if (blockIndex>backward && blockIndex<(blockCount-forward)){
 
-            float entropy=shannonEntropy(&(((int16_t*)signaleValues[fileHeader.audioHeader.CnNumber-2])[blockIndex-backward]), elements,mod);
+            float entropy=shannonEntropy(&(((int16_t*)Chanels[fileHeader.audioHeader.CnNumber-2])[blockIndex-backward]), elements,mod);
 
-            ((int16_t*)signaleValues[fileHeader.audioHeader.CnNumber-1])[blockIndex]=entropy*16000;
+            ((int16_t*)Chanels[fileHeader.audioHeader.CnNumber-1])[blockIndex]=entropy*16000;
 
         }
     }
@@ -115,16 +109,16 @@ void WaveFile::ConvertHtoPWM(int chanelIndex){
     uint8_t *PWM=new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8];
 
     int f=fileHeader.audioHeader.Frequency;
-    int periode=18*fileHeader.audioHeader.Frequency/1000; //pulse
-    int minPulsW=1*fileHeader.audioHeader.Frequency/1000; //pulse
-    int maxPulsW=2*fileHeader.audioHeader.Frequency/1000; //pulse
+    int periode=(19.54f*fileHeader.audioHeader.Frequency)/1000; //pulse
+    int minPulsW=(1.0f*fileHeader.audioHeader.Frequency)/1000; //pulse
+    int maxPulsW=(1.2f*fileHeader.audioHeader.Frequency)/1000; //pulse
     int maxPulsDuration=maxPulsW-minPulsW;
 
     for (int periodeIndex = 0; periodeIndex < (blockCount-periode)/periode; ++periodeIndex) {
-        float factor=mean(&(((int16_t*)signaleValues[chanelIndex])[periodeIndex*periode]),maxPulsDuration)/INT16_MAX;
+        float factor=mean(&(((int16_t*)Chanels[chanelIndex])[periodeIndex*periode]),maxPulsDuration)/INT16_MAX;
         uint16_t pulsW=minPulsW+maxPulsDuration*factor;
         for (int pulseSubPeriodeIndex = 0; pulseSubPeriodeIndex < periode; ++pulseSubPeriodeIndex) {
-            if (pulseSubPeriodeIndex<pulsW) ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=-INT16_MAX;
+            if (pulseSubPeriodeIndex<pulsW) ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=INT16_MAX/4;
             else ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=0;
         }
     }
@@ -133,8 +127,8 @@ void WaveFile::ConvertHtoPWM(int chanelIndex){
     //delete signales[chanelIndex+1];
     //signales[chanelIndex+1]=PWM;
 
-    delete signaleValues[chanelIndex];
-    signaleValues[chanelIndex]=PWM;
+    delete Chanels[chanelIndex];
+    Chanels[chanelIndex]=PWM;
 }
 
 void WaveFile::WrightData(FILE *outputFile){
@@ -143,7 +137,7 @@ void WaveFile::WrightData(FILE *outputFile){
 
     for (uint32_t blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
         for (uint32_t chanelIndex = 0; chanelIndex < fileHeader.audioHeader.CnNumber; ++chanelIndex) {
-            fwrite(&((int16_t*)signaleValues[chanelIndex])[blockIndex], sizeof(int16_t), 1, outputFile);
+            fwrite(&((int16_t*)Chanels[chanelIndex])[blockIndex], sizeof(int16_t), 1, outputFile);
         }
     }
 }
