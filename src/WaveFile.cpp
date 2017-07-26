@@ -109,13 +109,14 @@ void WaveFile::ConvertHtoPWM(int chanelIndex){
     uint8_t *PWM=new uint8_t[blockCount*fileHeader.audioHeader.BitsPerSample/8];
 
     int f=fileHeader.audioHeader.Frequency;
-    int periode=(19.54f*fileHeader.audioHeader.Frequency)/1000; //pulse
+    int periode=(15.0f*fileHeader.audioHeader.Frequency)/1000; //pulse
     int minPulsW=(1.0f*fileHeader.audioHeader.Frequency)/1000; //pulse
-    int maxPulsW=(1.2f*fileHeader.audioHeader.Frequency)/1000; //pulse
+    int maxPulsW=(2.0f*fileHeader.audioHeader.Frequency)/1000; //pulse
     int maxPulsDuration=maxPulsW-minPulsW;
 
     for (int periodeIndex = 0; periodeIndex < (blockCount-periode)/periode; ++periodeIndex) {
-        float factor=mean(&(((int16_t*)Chanels[chanelIndex])[periodeIndex*periode]),maxPulsDuration)/INT16_MAX;
+        float factor=mean(&(((int16_t*)Chanels[chanelIndex])[periodeIndex*periode]),maxPulsDuration)/15000;
+        factor = factor>1?1:factor;
         uint16_t pulsW=minPulsW+maxPulsDuration*factor;
         for (int pulseSubPeriodeIndex = 0; pulseSubPeriodeIndex < periode; ++pulseSubPeriodeIndex) {
             if (pulseSubPeriodeIndex<pulsW) ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=INT16_MAX/4;
