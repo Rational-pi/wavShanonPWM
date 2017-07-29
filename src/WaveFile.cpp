@@ -119,7 +119,7 @@ void WaveFile::ConvertHtoPWM(int chanelIndex){
         factor = factor>1?1:factor;
         uint16_t pulsW=minPulsW+maxPulsDuration*factor;
         for (int pulseSubPeriodeIndex = 0; pulseSubPeriodeIndex < periode; ++pulseSubPeriodeIndex) {
-            if (pulseSubPeriodeIndex<pulsW) ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=INT16_MAX/4;
+            if (pulseSubPeriodeIndex<pulsW) ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=-INT16_MAX;
             else ((int16_t*)PWM)[periodeIndex*periode+pulseSubPeriodeIndex]=0;
         }
     }
